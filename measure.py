@@ -8,10 +8,10 @@ import os
 
 class Measure:
     registries = {  # register, length, signed, multiplier
-        "TIME": [0x18, 3, False, 0.001521],
-        "ACCEL_X": [0x12, 2, True, 0.0001220703125], # multip = 2^(-15)*g-range
-        "ACCEL_Y": [0x14, 2, True, 0.0001220703125], # multip = 2^(-15)*g-range
-        "ACCEL_Z": [0x16, 2, True, 0.0001220703125], # multip = 2^(-15)*g-range
+        "TIME": [0x18, 3, False, 39*10**-6],
+        "ACCEL_X": [0x12, 2, True, 2**-15*4], # multip = 2^(-15)*g-range
+        "ACCEL_Y": [0x14, 2, True, 2**-15*4], # multip = 2^(-15)*g-range
+        "ACCEL_Z": [0x16, 2, True, 2**-15*4], # multip = 2^(-15)*g-range
         # 'GYRO_X': [0x0C,2, True],
         # 'GYRO_Y': [0x0E,2, True],
         # 'GYRO_Z': [0x10,2, True],
@@ -20,9 +20,9 @@ class Measure:
     def __init__(self, bus, address):
         self.bus = SMBus(bus)
         self.address = address
+        self.last_read = None
         self._configure_device()
         self._merge_registries()
-        self._connect_ssh()
 
     def _configure_device(self):
         self.bus.write_byte_data(
@@ -100,28 +100,30 @@ class Measure:
                     signed=self.registries[key][2],
                 )
                 read_count += self.registries[key][1]
+        self.last_read = result
         return result
 
-    def readfast(self):  # only works for specific data read
-        read = self.bus.read_i2c_block_data(self.address, 0x12, 9)
-        return {
-            "TIME": int.from_bytes(
-                [read[6], read[7], read[8]], byteorder="little", signed=False
-            ),
-            "ACCEL_X": int.from_bytes(
-                [read[0], read[1]], byteorder="little", signed=True
-            ),
-            "ACCEL_Y": int.from_bytes(
-                [read[2], read[3]], byteorder="little", signed=True
-            ),
-            "ACCEL_Z": int.from_bytes(
-                [read[4], read[5]], byteorder="little", signed=True
-            ),
-        }
+    # def readfast(self):  # only works for specific data read
+    #     read = self.bus.read_i2c_block_data(self.address, 0x12, 9)
+    #     return {
+    #         "TIME": int.from_bytes(
+    #             [read[6], read[7], read[8]], byteorder="little", signed=False
+    #         ),
+    #         "ACCEL_X": int.from_bytes(
+    #             [read[0], read[1]], byteorder="little", signed=True
+    #         ),
+    #         "ACCEL_Y": int.from_bytes(
+    #             [read[2], read[3]], byteorder="little", signed=True
+    #         ),
+    #         "ACCEL_Z": int.from_bytes(
+    #             [read[4], read[5]], byteorder="little", signed=True
+    #         ),
+    #     }
 
-    def start_log(self):
-        filename = f"./measurement_log_{str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))}.csv"
-        with open(filename, "w", newline="") as csvfile:
+    def start_measure(self, log=False):
+        if log:
+            filename = f"./measurement_log_{str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))}.csv"
+            csvfile = open(filename, "w", newline="") 
             # Create a CSV writer object
             writer = csv.writer(csvfile)
             # Write the header
@@ -132,15 +134,24 @@ class Measure:
                         pass
                     row = self.read().values()
                     writer.writerow(row)
-                    sleep(0.005)
+                    sleep(0.008)
             except KeyboardInterrupt:
                 pass
             finally:
                 csvfile.close()
+                self._connect_ssh()
                 sftp = self.__ssh.open_sftp()
                 sftp.put(filename, f"/home/{os.getenv('SSH_USERNAME')}/Documents/MATLAB/{filename.split('/')[-1]}")
                 sftp.close()
                 self.__ssh.close()
+        else:
+            try:
+                while True:
+                    while self._read_measurement(0x1B, 1)[0] & 0x80 == 0:  # wait for drdy_acc
+                        pass
+                    sleep(0.008)
+            except KeyboardInterrupt:
+                pass
 
 # try:
 #     while True:
