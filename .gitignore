@@ -1,1 +1,2 @@
-measurement_log.csv
+measurement_log_*.csv
+.env
