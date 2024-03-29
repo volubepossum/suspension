@@ -1,2 +1,3 @@
 measurement_log_*.csv
 .env
+*.pyc
