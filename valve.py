@@ -6,7 +6,6 @@ pwm_pin = 17
 
 # Set the PWM frequency and duty cycle
 pwm_frequency = 1000  # in Hz
-pwm_duty_cycle = 50  # in percentage
 
 # Initialize the valve
 def init_valve():
@@ -19,7 +18,7 @@ def init_valve():
     # Setup the PWM pin
     global pwm
     pwm = GPIO.PWM(pwm_pin, pwm_frequency)
-    pwm.start(pwm_duty_cycle)
+    pwm.start(input("Duty: "))
 
 # Set the valve opening
 def set_valve(percentage):

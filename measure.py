@@ -9,9 +9,9 @@ import os
 class Measure:
     registries = {  # register, length, signed, multiplier
         "TIME": [0x18, 3, False, 39*10**-6],
-        "ACCEL_X": [0x12, 2, True, 2**-15*4], # multip = 2^(-15)*g-range
-        "ACCEL_Y": [0x14, 2, True, 2**-15*4], # multip = 2^(-15)*g-range
-        "ACCEL_Z": [0x16, 2, True, 2**-15*4], # multip = 2^(-15)*g-range
+        "A_X": [0x12, 2, True, 2**-15*4], # multip = 2^(-15)*g-range
+        "A_Y": [0x14, 2, True, 2**-15*4], # multip = 2^(-15)*g-range
+        "A_Z": [0x16, 2, True, 2**-15*4], # multip = 2^(-15)*g-range
         # 'GYRO_X': [0x0C,2, True],
         # 'GYRO_Y': [0x0E,2, True],
         # 'GYRO_Z': [0x10,2, True],
