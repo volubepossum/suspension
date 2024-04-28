@@ -1,6 +1,5 @@
 import time
 
-
 class PIDFController:
     def __init__(self, kp=0, ki=0, kd=0, kf=0, time_constant=0.1):
         self.kp = kp

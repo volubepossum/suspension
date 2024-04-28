@@ -1,16 +1,10 @@
-import measure as measure
-import valve
+#!/usr/bin/env python3
+
+import measure
+#import python.valve as valve
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# measure = mea.Measure(1, 0x69)
-# measure.start_measure(True)
-
-valve.init_valve()
-
-try:
-    while True:
-        valve.set_valve(float(input("Duty: ")))
-except KeyboardInterrupt:
-    pass
+bmi1 = measure.Measure(1)
+measure.start_measure(True)
