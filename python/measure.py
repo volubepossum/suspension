@@ -20,10 +20,11 @@ class Measure:
         "GYRO_Z": [0x10, 2, True],
     }
 
-    def __init__(self, device_id, registries = ["TIME", "A_X", "A_Y", "A_Z"]):
+    def __init__(self, device_id, registries=["TIME", "A_X", "A_Y", "A_Z"]):
         self.bus = spidev.SpiDev(0, device_id)
-        self.bus.max_speed_hz = 5000000
+        self.bus.max_speed_hz = 10000
         self.last_read = None
+        self.device_id = device_id
         self._configure_device()
         self.registries = {
             key: value
@@ -33,22 +34,36 @@ class Measure:
         self._merge_registries()
 
     def _configure_device(self):
-        self.bus.xfer(
-            [0x41, 0x05]
-        )  # set g-range to  0x03 for +-2g, 0x05 for 4g, 0x08 for 8g, 0x0C for 16g
-        input("hold the device still and vertical, then press enter")
-        self.bus.xfer(
-            [0x69, 0b00111101]
-        )  # configure FOC 0b00xxyyzz, ´0b00´ -> disabled, ´0b01´ -> +1 g, ´0b10´ -> -1 g, or ´0b11´ -> 0 g
-        self.bus.xfer([0x77, 0b010000000])  # enable offset
-        self.bus.xfer([0x7E, 0x03])  # trigger FOC
-        while self.bus.xfer(0x80 | 0x1B) & 0x08 == 0:
-            pass
-        print("FOC done")
-        self.bus.xfer(
-            [0x40, 0x28]
-        )  # 7: undersampling, 6-4: filtering config (0b010 for normal mode), 3-0: sampling rate (100*2^(x-8) Hz)
-        self.bus.xfer([0x7E, 0x11])  # set accelerometer mode to normal
+        done = False
+        while not done:
+            self.bus.xfer([0xff, 0x00])  # turn on SPI mode
+            self.bus.xfer(
+                [0x41, 0x05]
+            )  # set g-range to  0x03 for +-2g, 0x05 for 4g, 0x08 for 8g, 0x0C for 16g
+            if self._read_measurement(0x00, 1)[0] == 0xd1:
+                print(f"bmi {self.device_id} connected")
+                self.error_check()
+            else:
+                print(f"bmi {self.device_id} not connected")
+                exit()
+
+            input("hold the device still and vertical, then press enter")
+            self.bus.xfer(
+                [0x69, 0b00111101]
+            )  # configure FOC 0b00xxyyzz, ´0b00´ -> disabled, ´0b01´ -> +1 g, ´0b10´ -> -1 g, or ´0b11´ -> 0 g
+            self.bus.xfer([0x77, 0b010000000])  # enable offset
+            self.bus.xfer([0x7E, 0x03])  # trigger FOC
+            sleep(0.2)
+            if not self.error_check(): # True: ok, False: soft reset
+                continue
+            while self._read_measurement(0x1B, 1)[0] & 0x08 == 0:
+                # print(self._read_measurement(0x00, 1)[0])
+                pass
+            print("FOC done")
+            self.bus.xfer(
+                [0x40, 0x28]
+            )  # 7: undersampling, 6-4: filtering config (0b010 for normal mode), 3-0: sampling rate (100*2^(x-8) Hz)
+            self.bus.xfer([0x7E, 0x11])  # set accelerometer mode to normal
 
     def _merge_registries(self):
         self.reads = []  # first, length, [registries]
@@ -90,7 +105,7 @@ class Measure:
 
     def _read_measurement(self, register, length):
         tx_data = [0x80 | register] + [0x00] * length
-        rx_data = self.bus.xfer2(tx_data)
+        rx_data = self.bus.xfer(tx_data)
         return rx_data[1:]
 
     def read(self):
@@ -142,6 +157,7 @@ class Measure:
                         pass
                     row = self.read().values()
                     writer.writerow(row)
+                    print(row)
                     sleep(0.008)
             except KeyboardInterrupt:
                 pass
@@ -165,6 +181,16 @@ class Measure:
                     sleep(0.008)
             except KeyboardInterrupt:
                 pass
+    def error_check(self):
+        err = self._read_measurement(0x02, 1)[0]
+        if err != 0x00:
+            print(f"bmi {self.device_id} error detected {format(err, '#010b')}")
+            print("trying soft reset")
+            self._read_measurement(0x03, 1)[0]
+            sleep(0.03)
+            return False
+        else:
+            return True
 
 
 # try:
