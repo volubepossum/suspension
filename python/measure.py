@@ -55,7 +55,7 @@ class Measure:
 
         input(f"hold the device still and vertical for dev-{self.device_id}, then press enter")
         self.bus.xfer(
-            [0x69, 0b00111101]
+            [0x69, 0b00011111]
         )  # configure FOC 0b00xxyyzz, ´0b00´ -> disabled, ´0b01´ -> +1 g, ´0b10´ -> -1 g, or ´0b11´ -> 0 g
         self.bus.xfer([0x77, 0b010000000])  # enable offset
         self.bus.xfer([0x7E, 0x03])  # trigger FOC
@@ -154,7 +154,7 @@ class Measure:
                     pass
                 row = self.read().values()
                 writer.writerow(row)
-                print(row)
+                #print(row)
                 await asyncio.sleep(0.008)
             csvfile.close()
             self._upload_ssh(filename)
