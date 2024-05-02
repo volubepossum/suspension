@@ -4,10 +4,9 @@ from time import sleep
 from datetime import datetime
 import paramiko
 import os
-
+import asyncio
 
 spi = spidev.SpiDev()
-
 
 class Measure:
     possible_registries = {  # register, length, signed, multiplier
@@ -22,9 +21,10 @@ class Measure:
 
     def __init__(self, device_id, registries=["TIME", "A_X", "A_Y", "A_Z"]):
         self.bus = spidev.SpiDev(0, device_id)
-        self.bus.max_speed_hz = 10000
+        self.bus.max_speed_hz = 100000
         self.last_read = None
         self.device_id = device_id
+        self.terminate_signal = False
         self._configure_device()
         self.registries = {
             key: value
@@ -53,7 +53,7 @@ class Measure:
             [0x41, 0x05]
         )  # set g-range to  0x03 for +-2g, 0x05 for 4g, 0x08 for 8g, 0x0C for 16g
 
-        input("hold the device still and vertical, then press enter")
+        input(f"hold the device still and vertical for dev-{self.device_id}, then press enter")
         self.bus.xfer(
             [0x69, 0b00111101]
         )  # configure FOC 0b00xxyyzz, ´0b00´ -> disabled, ´0b01´ -> +1 g, ´0b10´ -> -1 g, or ´0b11´ -> 0 g
@@ -129,24 +129,17 @@ class Measure:
         self.last_read = result
         return result
 
-    # def readfast(self):  # only works for specific data read
-    #     read = self.bus.read_i2c_block_data(self.address, 0x12, 9)
-    #     return {
-    #         "TIME": int.from_bytes(
-    #             [read[6], read[7], read[8]], byteorder="little", signed=False
-    #         ),
-    #         "ACCEL_X": int.from_bytes(
-    #             [read[0], read[1]], byteorder="little", signed=True
-    #         ),
-    #         "ACCEL_Y": int.from_bytes(
-    #             [read[2], read[3]], byteorder="little", signed=True
-    #         ),
-    #         "ACCEL_Z": int.from_bytes(
-    #             [read[4], read[5]], byteorder="little", signed=True
-    #         ),
-    #     }
-
-    def start_measure(self, log=False):
+    def _upload_ssh(self, filename):
+            self._connect_ssh()
+            sftp = self.__ssh.open_sftp()
+            sftp.put(
+                filename,
+                f"/home/{os.getenv('SSH_USERNAME')}/Documents/MATLAB/{filename.split('/')[-1]}",
+            )
+            sftp.close()
+            self.__ssh.close()
+        
+    async def start_measure(self, log=False):
         if log:
             filename = f"./measurement_log_{self.device_id}_{str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))}.csv"
             csvfile = open(filename, "w", newline="")
@@ -154,38 +147,24 @@ class Measure:
             writer = csv.writer(csvfile)
             # Write the header
             writer.writerow(self.read().keys())
-            try:
-                while True:
-                    while (
-                        self._read_measurement(0x1B, 1)[0] & 0x80 == 0
-                    ):  # wait for drdy_acc
-                        pass
-                    row = self.read().values()
-                    writer.writerow(row)
-                    print(row)
-                    sleep(0.008)
-            except KeyboardInterrupt:
-                pass
-            finally:
-                csvfile.close()
-                self._connect_ssh()
-                sftp = self.__ssh.open_sftp()
-                sftp.put(
-                    filename,
-                    f"/home/{os.getenv('SSH_USERNAME')}/Documents/MATLAB/{filename.split('/')[-1]}",
-                )
-                sftp.close()
-                self.__ssh.close()
+            while not self.terminate_signal:
+                while (
+                    self._read_measurement(0x1B, 1)[0] & 0x80 == 0
+                ):  # wait for drdy_acc
+                    pass
+                row = self.read().values()
+                writer.writerow(row)
+                print(row)
+                await asyncio.sleep(0.008)
+            csvfile.close()
+            self._upload_ssh(filename)
         else:
-            try:
-                while True:
-                    while (
-                        self._read_measurement(0x1B, 1)[0] & 0x80 == 0
-                    ):  # wait for drdy_acc
-                        pass
-                    sleep(0.008)
-            except KeyboardInterrupt:
-                pass
+            while not self.terminate_signal:
+                while (
+                    self._read_measurement(0x1B, 1)[0] & 0x80 == 0
+                ):  # wait for drdy_acc
+                    pass
+                await asyncio.sleep(0.008)
 
     def error_check(self, on_error=lambda: 0, on_ok=lambda: 0):
         err = self._read_measurement(0x02, 1)[0]
@@ -194,17 +173,3 @@ class Measure:
             on_ok()
         else:
             on_error()
-
-
-# try:
-#     while True:
-#         measure = Measure(1, 0x69)
-#         measurements = measure.read()
-#         string = ""
-#         for key, value in measurements.items():
-#             string += f" {key}: {value:#0{6}x}"
-#         print(string)
-#         # print(measure.bus.read_byte_data(0x69, 0x00))
-#         sleep(0.1)
-# except KeyboardInterrupt:
-#     passhttps://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bmi160-ds000.pdf#page=48&zoom=100,90,130
