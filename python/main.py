@@ -5,6 +5,9 @@ import aioconsole
 from time import sleep
 from dotenv import load_dotenv
 import RPi.GPIO as GPIO
+import concurrent.futures
+import time
+import os
 
 import measure
 import valve as Valve
@@ -17,7 +20,11 @@ bmi1 = measure.Measure(1)
 valve = Valve.Valve(400)
 logger = Logger.Logger()
 
-    
+def sync_task(task_id):
+    i = 0
+    while True:
+        print(f"Sync task {task_id} running {i} on process {os.getpid()}")
+        i += 1
 
 async def terminal_monitor():
     while True:
@@ -39,9 +46,12 @@ async def terminal_monitor():
 async def main():
     # Start motor loop and speed monitor loop concurrently
     logger.start_log()
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+    #     executor.map(sync_task, range(3))
     tasks = [
         asyncio.create_task(bmi0.start_measure(logger)),
         asyncio.create_task(bmi1.start_measure(logger)),
+        asyncio.create_task(valve.valve_logger(logger)),
         asyncio.create_task(valve.motor_loop()),
         asyncio.create_task(terminal_monitor())
         ]

@@ -3,13 +3,18 @@ import csv
 import paramiko
 import os
 from datetime import datetime
+import time as Time
 
 class Logger:
     def __init__(self):
         self.filename = None
+        self.startTime = Time.time()
         self.bmi0TimeOffset = None
         self.bmi1TimeOffset = None
         
+    def uptime(self):
+        return Time.time() - self.startTime
+    
     def _connect_ssh(self):
         self.__ssh = paramiko.SSHClient()
         self.__ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -40,11 +45,11 @@ class Logger:
     def log_row(self, row):
         self.writer.writerow(row)
     
-    def bmi_time_sync(self, deviceid, time):
+    def bmi_time_sync(self, deviceid, bmiTime):
         if deviceid==0:
-            self.bmi0TimeOffset =  time
+            self.bmi0TimeOffset =  bmiTime - self.uptime()
         elif deviceid==1:
-            self.bmi1TimeOffset = time
+            self.bmi1TimeOffset = bmiTime - self.uptime()
         else:
             raise ValueError("Invalid device id")
     
@@ -56,6 +61,9 @@ class Logger:
         else:
             raise ValueError("Invalid device id")
         self.log_row(logRow)
+    
+    def log_valve(self, position):
+        self.log_row([self.uptime(), None, None, None, None, None, None, position])
     
     def end_log(self):
         self.csvfile.close()

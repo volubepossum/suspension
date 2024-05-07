@@ -142,6 +142,11 @@ class Valve:
             else:
                 print("Valid commands: 'q' to quit, 'c' to calibrate, or a number (%) to move the valve.")
 
+    async def valve_logger(self, logger):
+        while self.terminate_signal == False:
+            logger.log_valve(self.current_position)
+            await asyncio.sleep(0.02)
+
 if __name__ == "__main__":
     valve = Valve()
     async def main():
