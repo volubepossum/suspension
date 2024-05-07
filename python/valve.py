@@ -144,7 +144,7 @@ class Valve:
 
     async def valve_logger(self, logger):
         while self.terminate_signal == False:
-            logger.log_valve(self.current_position)
+            logger.log_valve(self.current_position/MAX_VALVE_POSITION)
             await asyncio.sleep(0.02)
 
 if __name__ == "__main__":

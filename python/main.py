@@ -64,14 +64,9 @@ def program_terminate():
     logger.end_log()
     sleep(1)
     print("Goodbye")
-    
-    
+
 try:
     asyncio.run(main())
 except KeyboardInterrupt:
     # Clean up GPIO on Ctrl+C
     program_terminate()
-    
-
-
-
