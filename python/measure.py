@@ -1,12 +1,11 @@
 import spidev
 import csv
 from time import sleep
-from datetime import datetime
-import paramiko
-import os
 import asyncio
+import RPi.GPIO as GPIO
 
 spi = spidev.SpiDev()
+
 
 class Measure:
     possible_registries = {  # register, length, signed, multiplier
@@ -40,6 +39,7 @@ class Measure:
             self.error_check()
         else:
             print(f"bmi {self.device_id} not connected")
+            GPIO.cleanup()
             exit()
         
         self.bus.xfer([0x7E, 0x11])  # set accelerometer mode to normal
@@ -60,7 +60,7 @@ class Measure:
         self.bus.xfer([0x77, 0b010000000])  # enable offset
         self.bus.xfer([0x7E, 0x03])  # trigger FOC
         sleep(0.2)
-        self.error_check(lambda: self._configure_device)
+        self.error_check(lambda: self._configure_device, lambda: print("BMI ready for FOC"))
         while self._read_measurement(0x1B, 1)[0] & 0x08 == 0:
             # print(self._read_measurement(0x00, 1)[0])
             pass
@@ -98,16 +98,6 @@ class Measure:
                 pre[2].append(key)
                 pre[2].extend(post[2])
 
-    def _connect_ssh(self):
-        self.__ssh = paramiko.SSHClient()
-        self.__ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.__ssh.connect(
-            os.getenv("SSH_IP"),
-            username=os.getenv("SSH_USERNAME"),
-            password=os.getenv("SSH_PASSWORD"),
-        )
-        print("Connected to SSH")
-
     def _read_measurement(self, register, length):
         tx_data = [0x80 | register] + [0x00] * length
         rx_data = self.bus.xfer(tx_data)
@@ -128,36 +118,21 @@ class Measure:
                 read_count += self.registries[key][1]
         self.last_read = result
         return result
-
-    def _upload_ssh(self, filename):
-            self._connect_ssh()
-            sftp = self.__ssh.open_sftp()
-            sftp.put(
-                filename,
-                f"/home/{os.getenv('SSH_USERNAME')}/Documents/MATLAB/{filename.split('/')[-1]}",
-            )
-            sftp.close()
-            self.__ssh.close()
-        
-    async def start_measure(self, log=False):
-        if log:
-            filename = f"./measurement_log_{self.device_id}_{str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))}.csv"
-            csvfile = open(filename, "w", newline="")
-            # Create a CSV writer object
-            writer = csv.writer(csvfile)
+    
+    async def start_measure(self, logger = None):
+        if logger is not None:
             # Write the header
-            writer.writerow(self.read().keys())
+            #logger.log_row(self.read().keys())
+            logger.bmi_time_sync(self.device_id, self.read()["TIME"])
             while not self.terminate_signal:
                 while (
                     self._read_measurement(0x1B, 1)[0] & 0x80 == 0
                 ):  # wait for drdy_acc
                     pass
-                row = self.read().values()
-                writer.writerow(row)
+                
+                logger.log_bmi(self.device_id, self.read())
                 #print(row)
                 await asyncio.sleep(0.008)
-            csvfile.close()
-            self._upload_ssh(filename)
         else:
             while not self.terminate_signal:
                 while (

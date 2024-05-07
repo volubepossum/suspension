@@ -4,15 +4,20 @@ import asyncio
 import aioconsole
 from time import sleep
 from dotenv import load_dotenv
+import RPi.GPIO as GPIO
 
 import measure
 import valve as Valve
+import logger as Logger
 
 load_dotenv()
 
 bmi0 = measure.Measure(0)
 bmi1 = measure.Measure(1)
-valve = Valve.Valve(200)
+valve = Valve.Valve(400)
+logger = Logger.Logger()
+
+    
 
 async def terminal_monitor():
     while True:
@@ -21,8 +26,7 @@ async def terminal_monitor():
         )
         if prompt.lower() == "q":
             await valve.quit()
-            bmi0.terminate_signal = True
-            bmi1.terminate_signal = True
+            program_terminate()
             break
         elif prompt.lower() == "c":  # calibrate
             await valve.calibrate()
@@ -34,25 +38,29 @@ async def terminal_monitor():
 
 async def main():
     # Start motor loop and speed monitor loop concurrently
+    logger.start_log()
     tasks = [
-        asyncio.create_task(bmi0.start_measure(True)),
-        asyncio.create_task(bmi1.start_measure(True)),
+        asyncio.create_task(bmi0.start_measure(logger)),
+        asyncio.create_task(bmi1.start_measure(logger)),
         asyncio.create_task(valve.motor_loop()),
         asyncio.create_task(terminal_monitor())
         ]
     await asyncio.gather(*tasks)
 
-
+def program_terminate():
+    valve.terminate_signal = True
+    bmi0.terminate_signal = True
+    bmi1.terminate_signal = True
+    logger.end_log()
+    sleep(1)
+    print("Goodbye")
+    
+    
 try:
     asyncio.run(main())
 except KeyboardInterrupt:
     # Clean up GPIO on Ctrl+C
-    bmi0.terminate_signal = True
-    bmi1.terminate_signal = True
-    valve.terminate_signal = True
-    
-    sleep(1)
-    print("Died!")
+    program_terminate()
     
 
 

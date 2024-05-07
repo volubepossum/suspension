@@ -73,7 +73,7 @@ class Valve:
         while self.current_position != 0:
             await asyncio.sleep(0.1)
         GPIO.cleanup()
-        print("goodbye")
+        print("Valve closed, valve worker quit")
         self.terminate_signal = True
     
     async def calibrate(self):
